@@ -1,0 +1,51 @@
+name: build-8188eu-for-android-x86-4.19.80
+
+on:
+  workflow_dispatch:
+  push  branches: [ "main", "master" ]
+
+jobs:
+  build-module:
+    runs-on: ubuntu-latest
+    env:
+      KERNEL_BRANCH: kernel-4.19
+      KERNEL_REPO: https://github.com/maurossi/linux.git
+      DRIVER_REPO: https://github.com/aircrack-ng/rtl8188eus.git
+      OUTPUT: 8188eu.ko
+
+    steps:
+    - name: prepare workspace
+      run: |
+        set -e
+        sudo apt-get update
+        sudo apt-get install -y build-essential git bc libncurses-dev flex bison libelf-dev wget
+
+    - name: clone kernel (4.19)
+      run: |
+        git clone --depth=1 --branch ${KERNEL_BRANCH} ${KERNEL_REPO} android-x86-kernel
+
+    - name: clone driver
+      run: |
+        git clone --depth=1 ${DRIVER_REPO} rtl8188eus
+
+    - name: prepare kernel for external modules
+      run: |
+        cd android-x86-kernel
+        make ARCH=x86 x86_64_defconfig
+        make ARCH=x86 modules_prepare
+      working-directory: android-x86-kernel
+
+    - name: build 8188eu module
+      run: |
+        export KERNEL_SRC=$GITHUB_WORKSPACE/android-x86-kernel
+        cd rtl8188eus
+        make -C "$KERNEL_SRC" M=$(pwd) ARCH=x86 modules
+        ls -l *.ko || true
+      working-directory: rtl8188eus
+
+    - name: Upload built kernel module
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: 8188eu-ko
+        path: rtl8188eus/*.ko
