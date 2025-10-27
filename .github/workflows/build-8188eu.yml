@@ -1,0 +1,50 @@
+name: build-8188eu-for-android-x86-4.19.80
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential bc git bison flex libssl-dev libncurses5-dev crossbuild-essential-i386 libelf-dev dwarves
+
+      - name: Clone Android-x86 kernel source
+        run: |
+          mkdir -p ~/rtlbuild
+          cd ~/rtlbuild
+          git clone --depth=1 https://github.com/android-x86/kernel.git -b android-x86-4.19 android-x86-kernel
+
+      - name: Prepare kernel for build
+        run: |
+          cd ~/rtlbuild/android-x86-kernel
+          make ARCH=x86 x86_64_defconfig
+          scripts/config --disable CONFIG_UNWINDER_ORC
+          scripts/config --enable CONFIG_UNWINDER_FRAME_POINTER
+          make ARCH=x86 olddefconfig
+          make ARCH=x86 modules_prepare
+
+      - name: Clone 8188eu driver source
+        run: |
+          cd ~/rtlbuild
+          git clone --depth=1 https://github.com/lwfinger/rtl8188eu.git
+
+      - name: Build 8188eu.ko module
+        run: |
+          cd ~/rtlbuild/rtl8188eu
+          make ARCH=x86 CROSS_COMPILE=i686-linux-gnu- -C ~/rtlbuild/android-x86-kernel M=$(pwd) modules
+          mkdir -p ~/artifact
+          cp 8188eu.ko ~/artifact/
+
+      - name: Upload built module
+        uses: actions/upload-artifact@v4
+        with:
+          name: 8188eu-ko
+          path: ~/artifact/8188eu.ko
